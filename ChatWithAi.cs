@@ -1,4 +1,5 @@
-﻿using System.Collections;
+using System;
+using System.Collections;
 using System.Text;
 using TMPro;
 using UnityEngine;
@@ -11,21 +12,29 @@ public class ChatWithAI : MonoBehaviour
     [SerializeField] TMP_Text answerText;
 
     [Header("Hugging Face")]
-    [SerializeField] string hfToken = "hf_";
     [SerializeField] string modelId = "NousResearch/Hermes-2-Pro-Llama-3-8B";
 
-    const string API_URL = "https:";
-
+    const string API_URL = "https://api-inference.huggingface.co/v1/chat/completions";
 
     [TextArea(3, 6)]
     [SerializeField]
     string systemPrompt =
-    "You are Foxxy, a friendly fox character and RUSSIAN language tutor in a mobile AR game. " +
-    "The player writes in ENGLISH. " +
-    "You ALWAYS answer in ENGLISH with RUSSIAN examples. ";
+        "You are Foxxy, a friendly fox character and RUSSIAN language tutor in a mobile AR game. " +
+        "The player writes in ENGLISH. " +
+        "You ALWAYS answer in ENGLISH with RUSSIAN examples.";
 
+    string hfToken;
 
+    void Awake()
+    {
+        // Загружаем безопасно из переменной окружения
+        hfToken = Environment.GetEnvironmentVariable("HF_TOKEN");
 
+        if (string.IsNullOrEmpty(hfToken))
+        {
+            Debug.LogError("HF_TOKEN not found! Add it as system environment variable.");
+        }
+    }
 
     public void OnAskButton()
     {
@@ -48,12 +57,14 @@ public class ChatWithAI : MonoBehaviour
         StartCoroutine(SendChatRequest(wrappedQuestion));
     }
 
-
-
-
     IEnumerator SendChatRequest(string userQuestion)
     {
-        
+        if (string.IsNullOrEmpty(hfToken))
+        {
+            answerText.text = "ERROR: HF_TOKEN missing on this device.";
+            yield break;
+        }
+
         string bodyJson = BuildRequestJson(userQuestion);
         byte[] bodyRaw = Encoding.UTF8.GetBytes(bodyJson);
 
@@ -65,19 +76,15 @@ public class ChatWithAI : MonoBehaviour
             www.SetRequestHeader("Content-Type", "application/json");
             www.SetRequestHeader("Authorization", "Bearer " + hfToken);
 
-            // sending request
             yield return www.SendWebRequest();
 
             if (www.result != UnityWebRequest.Result.Success)
             {
-                Debug.LogError($"Foxy ERROR -> {www.responseCode} {www.error}\n{www.downloadHandler.text}");
                 answerText.text = $"Foxy: ERROR -> {www.responseCode}\n{www.downloadHandler.text}";
             }
             else
             {
                 string json = www.downloadHandler.text;
-                Debug.Log("HF raw response: " + json);
-
                 string aiAnswer = ExtractAssistantText(json);
                 answerText.text = "Foxy: " + aiAnswer;
             }
@@ -89,22 +96,17 @@ public class ChatWithAI : MonoBehaviour
         string escSystem = Escape(systemPrompt);
         string escUser = Escape(userQuestion);
 
-
-        string json =
-            "{"
-            + "\"model\":\"" + modelId + "\","
-            + "\"messages\":["
-                + "{\"role\":\"system\",\"content\":\"" + escSystem + "\"},"
-                + "{\"role\":\"user\",\"content\":\"" + escUser + "\"}"
-            + "],"
-            + "\"max_tokens\":256,"
-            + "\"temperature\":0.7"
-            + "}";
-
-        return json;
+        return "{"
+               + "\"model\":\"" + modelId + "\","
+               + "\"messages\":["
+                   + "{\"role\":\"system\",\"content\":\"" + escSystem + "\"},"
+                   + "{\"role\":\"user\",\"content\":\"" + escUser + "\"}"
+               + "],"
+               + "\"max_tokens\":256,"
+               + "\"temperature\":0.7"
+               + "}";
     }
 
-    
     string Escape(string s)
     {
         return s
@@ -114,20 +116,17 @@ public class ChatWithAI : MonoBehaviour
             .Replace("\r", "");
     }
 
-    
     string ExtractAssistantText(string json)
     {
-
         const string roleMark = "\"role\":\"assistant\"";
         int roleIndex = json.IndexOf(roleMark);
-        if (roleIndex < 0) return json; 
+        if (roleIndex < 0) return json;
 
         const string contentKey = "\"content\":\"";
         int contentIndex = json.IndexOf(contentKey, roleIndex);
         if (contentIndex < 0) return json;
 
         int start = contentIndex + contentKey.Length;
-
 
         int i = start;
         bool escaped = false;
@@ -138,21 +137,18 @@ public class ChatWithAI : MonoBehaviour
 
             if (escaped)
             {
-               
                 escaped = false;
                 continue;
             }
 
             if (c == '\\')
             {
-               
                 escaped = true;
                 continue;
             }
 
             if (c == '"')
             {
-              
                 break;
             }
         }
@@ -161,7 +157,6 @@ public class ChatWithAI : MonoBehaviour
 
         string raw = json.Substring(start, i - start);
 
-       
         raw = raw.Replace("\\n", "\n")
                  .Replace("\\r", "\r")
                  .Replace("\\\"", "\"")
@@ -169,6 +164,4 @@ public class ChatWithAI : MonoBehaviour
 
         return raw;
     }
-
 }
-
