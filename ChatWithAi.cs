@@ -14,7 +14,7 @@ public class ChatWithAI : MonoBehaviour
     [SerializeField] string hfToken = "hf_";
     [SerializeField] string modelId = "NousResearch/Hermes-2-Pro-Llama-3-8B";
 
-    const string API_URL = "https://router.huggingface.co/v1/chat/completions";
+    const string API_URL = "https:";
 
 
     [TextArea(3, 6)]
@@ -171,3 +171,4 @@ public class ChatWithAI : MonoBehaviour
     }
 
 }
+
